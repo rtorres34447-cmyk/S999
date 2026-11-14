@@ -13,38 +13,48 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout project
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Extract S999 project
+        shell: bash
+        run: |
+          ZIP=$(find . -maxdepth 2 -type f -iname '*.zip' | head -1)
+          if [ -z "$ZIP" ]; then
+            echo "No project ZIP found"
+            exit 1
+          fi
+          mkdir -p /tmp/s999project
+          unzip -q "$ZIP" -d /tmp/s999project
+          PROJECT=$(find /tmp/s999project -name settings.gradle -print -quit)
+          if [ -z "$PROJECT" ]; then
+            echo "settings.gradle missing from ZIP"
+            exit 1
+          fi
+          cp -a "$(dirname "$PROJECT")/." .
+          test -f app/build.gradle
+
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Find Android SDK manager
+      - name: Find SDK manager
         shell: bash
         run: |
           SDKMANAGER=$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)
-          if [ -z "$SDKMANAGER" ]; then
-            echo "Android SDK manager not found"
-            exit 1
-          fi
+          test -n "$SDKMANAGER"
           echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
 
-      - name: Install Android SDK 35
+      - name: Install Android SDK
         run: |
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
 
-      - name: Set up Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-
-      - name: Check Android project
-        run: |
-          test -f settings.gradle
-          test -f app/build.gradle
 
       - name: Build APK
         run: gradle --no-daemon :app:assembleDebug
