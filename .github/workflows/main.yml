@@ -14,44 +14,60 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract exact V2 project ZIP
+      - name: Extract V2 project
         shell: bash
         run: |
           set -euo pipefail
-          test -f S999-MKamuy-V2-GitHub.zip
-          mkdir -p "$RUNNER_TEMP/s999-v2"
-          unzip -q S999-MKamuy-V2-GitHub.zip -d "$RUNNER_TEMP/s999-v2"
-          test -f "$RUNNER_TEMP/s999-v2/settings.gradle"
-          test -f "$RUNNER_TEMP/s999-v2/app/build.gradle"
-          echo "PROJECT_DIR=$RUNNER_TEMP/s999-v2" >> "$GITHUB_ENV"
+          test -f S999-MKamuy-V2-GitHub.zip || { echo '::error::Upload S999-MKamuy-V2-GitHub.zip to the repository root'; exit 1; }
+          mkdir -p "$RUNNER_TEMP/s999-project"
+          unzip -oq S999-MKamuy-V2-GitHub.zip -d "$RUNNER_TEMP/s999-project"
+          test -f "$RUNNER_TEMP/s999-project/settings.gradle" || { echo '::error::settings.gradle missing from project ZIP'; exit 1; }
+          test -f "$RUNNER_TEMP/s999-project/app/build.gradle" || { echo '::error::app/build.gradle missing from project ZIP'; exit 1; }
+          echo "PROJECT_DIR=$RUNNER_TEMP/s999-project" >> "$GITHUB_ENV"
 
-      - name: Set up Java 17
+      - name: Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
+      - name: Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android platform 35
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Accept licenses and install SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || test "${PIPESTATUS[1]}" -eq 0
+          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+          sdkmanager --list_installed | grep -E 'platforms;android-35|build-tools;35.0.0'
 
-      - name: Set up Gradle 8.9
+      - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Build S999 MKamuy V2 debug APK
+      - name: Build debug APK (show detailed errors)
+        shell: bash
         working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle --no-daemon :app:assembleDebug
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace --console=plain :app:assembleDebug 2>&1 | tee "$RUNNER_TEMP/s999-build.log"
 
-      - name: Upload installable APK
+      - name: Upload build diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: S999-V2-build-log
+          path: ${{ runner.temp }}/s999-build.log
+          if-no-files-found: ignore
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: S999-MKamuy-V2-APK
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
