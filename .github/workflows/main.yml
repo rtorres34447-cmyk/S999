@@ -29,7 +29,7 @@ jobs:
           test -f "$RUNNER_TEMP/s999-v2/app/build.gradle" || { echo '::error::app/build.gradle is missing from V2 ZIP'; exit 1; }
           echo "PROJECT_DIR=$RUNNER_TEMP/s999-v2" >> "$GITHUB_ENV"
 
-      - name: Force S999 launcher landscape orientation
+      - name: Force S999 launcher reverse landscape orientation
         shell: bash
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -50,9 +50,9 @@ jobs:
           if not activities:
               raise SystemExit('No activities found in AndroidManifest.xml')
           for activity in activities:
-              activity.set(f'{{{android_ns}}}screenOrientation', 'landscape')
+              activity.set(f'{{{android_ns}}}screenOrientation', 'reverseLandscape')
           tree.write(manifest, encoding='utf-8', xml_declaration=True)
-          print(f'Landscape orientation enabled for {len(activities)} S999 activities')
+          print(f'Reverse landscape orientation enabled for {len(activities)} S999 activities')
           PY
 
       - name: Set up JDK 17
